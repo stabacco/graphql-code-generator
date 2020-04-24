@@ -40,6 +40,7 @@ describe('Integration', () => {
       expect(output[3].filename).toMatch(`/modules/dotanions/module-types.ts`);
       expect(output[4].filename).toMatch(`/modules/users/module-types.ts`);
     } catch (e) {
+      // eslint-disable-next-line no-console
       console.error(e);
       throw e;
     }
