@@ -30,14 +30,19 @@ describe('Integration', () => {
   // In this test, we make sure executeCodegen passes on a list of Sources as an extension
   // This is very imporant
   test('should generate a base output and 4 for modules', async () => {
-    const output = await executeCodegen(options);
+    try {
+      const output = await executeCodegen(options);
 
-    expect(output.length).toBe(5);
-    expect(output[0].filename).toMatch(`/modules/global-types.ts`);
-    expect(output[1].filename).toMatch(`/modules/blog/module-types.ts`);
-    expect(output[2].filename).toMatch(`/modules/common/module-types.ts`);
-    expect(output[3].filename).toMatch(`/modules/dotanions/module-types.ts`);
-    expect(output[4].filename).toMatch(`/modules/users/module-types.ts`);
+      expect(output.length).toBe(5);
+      expect(output[0].filename).toMatch(`/modules/global-types.ts`);
+      expect(output[1].filename).toMatch(`/modules/blog/module-types.ts`);
+      expect(output[2].filename).toMatch(`/modules/common/module-types.ts`);
+      expect(output[3].filename).toMatch(`/modules/dotanions/module-types.ts`);
+      expect(output[4].filename).toMatch(`/modules/users/module-types.ts`);
+    } catch (e) {
+      console.error(e);
+      throw e;
+    }
   });
 
   test('each module-types should include a relative import to glob-types module', async () => {
