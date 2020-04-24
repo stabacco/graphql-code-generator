@@ -33,11 +33,11 @@ describe('Integration', () => {
     const output = await executeCodegen(options);
 
     expect(output.length).toBe(5);
-    expect(output[0].filename).toMatch(normalize(`/modules/global-types.ts`));
-    expect(output[1].filename).toMatch(normalize(`/modules/blog/module-types.ts`));
-    expect(output[2].filename).toMatch(normalize(`/modules/common/module-types.ts`));
-    expect(output[3].filename).toMatch(normalize(`/modules/dotanions/module-types.ts`));
-    expect(output[4].filename).toMatch(normalize(`/modules/users/module-types.ts`));
+    expect(output[0].filename).toMatch(`/modules/global-types.ts`);
+    expect(output[1].filename).toMatch(`/modules/blog/module-types.ts`);
+    expect(output[2].filename).toMatch(`/modules/common/module-types.ts`);
+    expect(output[3].filename).toMatch(`/modules/dotanions/module-types.ts`);
+    expect(output[4].filename).toMatch(`/modules/users/module-types.ts`);
   });
 
   test('each module-types should include a relative import to glob-types module', async () => {
