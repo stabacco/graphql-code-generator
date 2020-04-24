@@ -140,7 +140,9 @@ export function groupSourcesByModule(sources: Source[], basePath: string): Recor
 }
 
 function extractModuleDirectory(filepath: string, basePath: string): string {
-  const [, relativePath] = normalize(filepath).split(normalize(ensureDirSeparatorAtEnd(basePath)));
+  const normalizedFilepath = normalize(filepath);
+  const normalizedBasePath = ensureStartsWithSeparator(normalize(ensureEndsWithSeparator(basePath)));
+  const [, relativePath] = normalizedFilepath.split(normalizedBasePath);
   const [moduleDirectory] = relativePath.split(sep);
 
   return moduleDirectory;
@@ -155,6 +157,10 @@ function normalize(path: string) {
   return path.replace(/\\/g, '/');
 }
 
-function ensureDirSeparatorAtEnd(path: string) {
+function ensureEndsWithSeparator(path: string) {
   return path.endsWith(sep) ? path : path + sep;
+}
+
+function ensureStartsWithSeparator(path: string) {
+  return path.startsWith('.') ? path.replace(/^(..\/)|(.\/)/, '/') : path.startsWith('/') ? path : '/' + path;
 }
