@@ -34,11 +34,11 @@ describe('Integration', () => {
       const output = await executeCodegen(options);
 
       expect(output.length).toBe(5);
-      expect(output[0].filename).toMatch(`/modules/global-types.ts`);
-      expect(output[1].filename).toMatch(`/modules/blog/module-types.ts`);
-      expect(output[2].filename).toMatch(`/modules/common/module-types.ts`);
-      expect(output[3].filename).toMatch(`/modules/dotanions/module-types.ts`);
-      expect(output[4].filename).toMatch(`/modules/users/module-types.ts`);
+      expect(normalize(output[0].filename)).toMatch(normalize(`/modules/global-types.ts`));
+      expect(normalize(output[1].filename)).toMatch(normalize(`/modules/blog/module-types.ts`));
+      expect(normalize(output[2].filename)).toMatch(normalize(`/modules/common/module-types.ts`));
+      expect(normalize(output[3].filename)).toMatch(normalize(`/modules/dotanions/module-types.ts`));
+      expect(normalize(output[4].filename)).toMatch(normalize(`/modules/users/module-types.ts`));
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error(e);
@@ -48,8 +48,7 @@ describe('Integration', () => {
 
   test('each module-types should include a relative import to glob-types module', async () => {
     const output = await executeCodegen(options);
-    const relativePath = normalize(`../global-types`);
-    const importStatement = `import * as Types from "${relativePath}";`;
+    const importStatement = `import * as Types from "../global-types";`;
 
     expect(output.length).toBe(5);
     expect(output[1].content).toMatch(importStatement);

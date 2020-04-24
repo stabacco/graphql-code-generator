@@ -1,8 +1,8 @@
 import { Types, CodegenPlugin } from '@graphql-codegen/plugin-helpers';
 import addPlugin from '@graphql-codegen/add';
 import { concatAST, parse } from 'graphql';
-import { groupSourcesByModule, stripFilename } from './utils';
 import { resolve, relative, join } from 'path';
+import { groupSourcesByModule, stripFilename, normalize } from './utils';
 import { buildModule } from './builder';
 
 export type ModulesConfig = {
@@ -126,7 +126,9 @@ export const preset: Types.OutputPreset<ModulesConfig> = {
     // One file per each module
     const outputs: Types.GenerateOptions[] = modules.map(moduleName => {
       const filename = resolve(cwd, baseOutputDir, moduleName, options.presetConfig.filename);
-      const importPath = join(relative(stripFilename(filename), baseTypesDir), baseTypesFilename); // ../../types
+      const dirpath = stripFilename(filename);
+      const relativePath = relative(dirpath, baseTypesDir);
+      const importPath = normalize(join(relativePath, baseTypesFilename)); // ../../types
       const sources = sourcesByModuleMap[moduleName];
 
       const moduleDocument = concatAST(

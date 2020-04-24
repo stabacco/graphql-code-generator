@@ -153,7 +153,7 @@ export function stripFilename(path: string) {
   return normalize(parsedPath.dir);
 }
 
-function normalize(path: string) {
+export function normalize(path: string) {
   return path.replace(/\\/g, '/');
 }
 
