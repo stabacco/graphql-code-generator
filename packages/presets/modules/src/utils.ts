@@ -10,6 +10,8 @@ import {
 } from 'graphql';
 import { normalize, sep } from 'path';
 
+const separator = '/';
+
 /**
  * Searches every node to collect used types
  */
@@ -121,7 +123,6 @@ export function indent(size: number) {
 }
 
 export function groupSourcesByModule(sources: Source[], basePath: string): Record<string, Source[]> {
-  basePath = normalize(basePath);
   const grouped: Record<string, Source[]> = {};
 
   sources.forEach(source => {
@@ -139,16 +140,16 @@ export function groupSourcesByModule(sources: Source[], basePath: string): Recor
 }
 
 function extractModuleDirectory(filepath: string, basePath: string): string {
-  const [, relativePath] = normalize(filepath).split(ensureDirSeparatorAtEnd(basePath));
-  const [moduleDirectory] = relativePath.split(sep);
+  const [, relativePath] = normalize(filepath).split(normalize(ensureDirSeparatorAtEnd(basePath)));
+  const [moduleDirectory] = relativePath.replace(sep, separator).split(separator);
 
   return moduleDirectory;
 }
 
 export function stripFilename(path: string) {
-  return path.substring(0, path.lastIndexOf(sep));
+  return path.substring(0, path.lastIndexOf(separator));
 }
 
 function ensureDirSeparatorAtEnd(path: string) {
-  return path.endsWith(sep) ? path : path + sep;
+  return path.endsWith(separator) ? path : path + separator;
 }
