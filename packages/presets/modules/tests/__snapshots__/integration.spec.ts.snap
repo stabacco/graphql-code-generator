@@ -1,6 +1,6 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`Integration dotanions module should export  1`] = `
+exports[`Integration dotanions module should export DefinedFields, Schema Types with Picks and resolvers 1`] = `
 "import * as Types from \\"../global-types\\";
 
 type DefinedFields = {
