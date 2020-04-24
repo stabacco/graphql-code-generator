@@ -8,9 +8,9 @@ import {
   TypeNode,
   Source,
 } from 'graphql';
-import { normalize, sep } from 'path';
+import parse from 'parse-filepath';
 
-const separator = '/';
+const sep = '/';
 
 /**
  * Searches every node to collect used types
@@ -141,15 +141,20 @@ export function groupSourcesByModule(sources: Source[], basePath: string): Recor
 
 function extractModuleDirectory(filepath: string, basePath: string): string {
   const [, relativePath] = normalize(filepath).split(normalize(ensureDirSeparatorAtEnd(basePath)));
-  const [moduleDirectory] = relativePath.replace(sep, separator).split(separator);
+  const [moduleDirectory] = relativePath.split(sep);
 
   return moduleDirectory;
 }
 
 export function stripFilename(path: string) {
-  return path.substring(0, path.lastIndexOf(separator));
+  const parsedPath = parse(path);
+  return normalize(parsedPath.dir);
+}
+
+function normalize(path: string) {
+  return path.replace(/\\/g, '/');
 }
 
 function ensureDirSeparatorAtEnd(path: string) {
-  return path.endsWith(separator) ? path : path + separator;
+  return path.endsWith(sep) ? path : path + sep;
 }
