@@ -1,39 +1,40 @@
 import { plugin } from '../src/index';
 import { buildSchema } from 'graphql';
 
-describe('My Plugin', () => {
+describe('A simple type with comments', () => {
   const schema = buildSchema(/* GraphQL */ `
     """
     This is my type
     """
     type MyType {
+      """
+      This is my real
+      """
       real: Int!
-    }
-
-    """
-    This is my input
-    """
-    input MyInput {
-      forsure: String! = "are you sure"
-    }
-    """
-    This is a query
-    """
-    type Query {
-      foo: String!
     }
   `);
 
-  it('Should greet', async () => {
+  it('Should create a class with docstring', async () => {
     const result = await plugin(
       schema,
       [],
       {
         globalNamespace: true,
+        license: '# This is my license, dawg',
       },
       { outputFile: './del.ts' }
     );
 
-    expect(result).toBe('Hello Dotan!');
+    expect(result).toBe(`# generated automatically by Stefano
+
+
+from dataclasses import dataclass
+
+
+@dataclass
+class MyType:
+    real: int
+
+`);
   });
 });

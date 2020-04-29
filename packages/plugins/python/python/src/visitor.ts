@@ -6,6 +6,7 @@ import {
   indent,
   buildScalars,
   getBaseTypeNode,
+  transformComment,
 } from '@graphql-codegen/visitor-plugin-common';
 import { PythonResolversPluginRawConfig } from './config';
 import {
@@ -23,39 +24,43 @@ import {
   isInputObjectType,
   isEnumType,
 } from 'graphql';
-import { C_SHARP_SCALARS, PythonDeclarationBlock, wrapTypeWithModifiers } from './common/common';
+import { PYTHON_SCALARS, PythonDeclarationBlock, wrapTypeWithModifiers } from './common/common';
 
 export interface PythonResolverParsedConfig extends ParsedConfig {
   className: string;
   listType: string;
   enumValues: EnumValuesMap;
+  license: string;
+  imports: string[];
+  decorators: string[];
 }
 
 export class PythonResolversVisitor extends BaseVisitor<PythonResolversPluginRawConfig, PythonResolverParsedConfig> {
-  constructor(rawConfig: PythonResolversPluginRawConfig, private _schema: GraphQLSchema, defaultPackageName: string) {
+  constructor(rawConfig: PythonResolversPluginRawConfig, private _schema: GraphQLSchema) {
     super(rawConfig, {
       enumValues: rawConfig.enumValues || {},
       listType: rawConfig.listType || 'List',
       className: rawConfig.className || 'Types',
-      scalars: buildScalars(_schema, rawConfig.scalars, C_SHARP_SCALARS),
+      scalars: buildScalars(_schema, rawConfig.scalars, PYTHON_SCALARS),
+      license: rawConfig.license || '# take the blue pill',
+      imports: rawConfig.imports || ['from dataclasses import dataclass'],
+      decorators: rawConfig.decorators || ['@dataclass', '@dataclass_json'],
     });
   }
 
+  /* returns the license from the config */
   public getLicense(): string {
-    return `# generated automatically by Stefano
-      
-      `;
+    return this.config.license;
   }
 
   public getImports(): string {
-    return `
-from dataclasses import dataclass
-`;
+    return this.config.imports.join('\n');
 
     //     const allImports = ['System', 'System.Collections.Generic', 'Newtonsoft.Json', 'GraphQL'];
     //     return allImports.map(i => `using ${i};`).join('\n') + '\n';
   }
 
+  // not needed
   public wrapWithClass(content: string): string {
     return new PythonDeclarationBlock()
       .asKind('class')
@@ -145,7 +150,11 @@ from dataclasses import dataclass
     return result;
   }
 
-  protected buildObject(name: string, inputValueArray: ReadonlyArray<FieldDefinitionNode>): string {
+  protected buildObject(
+    name: string,
+    inputValueArray: ReadonlyArray<FieldDefinitionNode>,
+    description?: string
+  ): string {
     const classMembers = inputValueArray
       .map(arg => {
         const typeToUse = this.resolveInputFieldType(arg.type);
@@ -153,9 +162,15 @@ from dataclasses import dataclass
       })
       .join('\n');
 
+    const decorators = this.config.decorators.join('\n');
+
+    const desc = indent(`"""
+${description} 
+"""`);
     return `
-@dataclass
+${decorators}
 class ${name}:
+${description}
 ${classMembers}
   `;
   }
@@ -222,7 +237,7 @@ ${classMembers}
   }
 
   ObjectTypeDefinition(node: ObjectTypeDefinitionNode): string {
-    return this.buildObject(node.name.value, node.fields);
+    return this.buildObject(node.name.value, node.fields, transformComment(node.description));
   }
 
   InterfaceTypeDefinition(node: InterfaceTypeDefinitionNode): string {

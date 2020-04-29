@@ -1,4 +1,4 @@
-export const C_SHARP_SCALARS = {
+export const PYTHON_SCALARS = {
   ID: 'str',
   String: 'str',
   Boolean: 'bool',

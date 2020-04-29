@@ -48,4 +48,24 @@ export interface PythonResolversPluginRawConfig extends RawConfig {
    * ```
    */
   listType?: string;
+  /**
+   * @name license
+   * @type string
+   * @default
+   * @description Allow you to customize license for the file.
+   * @example
+   * ```yml
+   * generates:
+   *   src/main/python/my-org/my-app/Types.cs:
+   *     plugins:
+   *       - python
+   *     config:
+   *       listType: Map
+   * ```
+   */
+  license?: string;
+
+  imports?: string[];
+
+  decorators?: string[];
 }
