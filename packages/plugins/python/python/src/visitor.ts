@@ -6,23 +6,22 @@ import {
   indent,
   buildScalars,
   getBaseTypeNode,
-  transformComment,
 } from '@graphql-codegen/visitor-plugin-common';
 import { PythonResolversPluginRawConfig } from './config';
 import {
   GraphQLSchema,
   EnumTypeDefinitionNode,
   EnumValueDefinitionNode,
-  InterfaceTypeDefinitionNode,
   InputObjectTypeDefinitionNode,
   ObjectTypeDefinitionNode,
-  FieldDefinitionNode,
   InputValueDefinitionNode,
   TypeNode,
   Kind,
   isScalarType,
   isInputObjectType,
   isEnumType,
+  StringValueNode,
+  InterfaceTypeDefinitionNode,
 } from 'graphql';
 import { PYTHON_SCALARS, PythonDeclarationBlock, wrapTypeWithModifiers } from './common/common';
 
@@ -44,7 +43,7 @@ export class PythonResolversVisitor extends BaseVisitor<PythonResolversPluginRaw
       scalars: buildScalars(_schema, rawConfig.scalars, PYTHON_SCALARS),
       license: rawConfig.license || '# take the blue pill',
       imports: rawConfig.imports || ['from dataclasses import dataclass'],
-      decorators: rawConfig.decorators || ['@dataclass', '@dataclass_json'],
+      decorators: rawConfig.decorators || ['@dataclass'],
     });
   }
 
@@ -150,31 +149,6 @@ export class PythonResolversVisitor extends BaseVisitor<PythonResolversPluginRaw
     return result;
   }
 
-  protected buildObject(
-    name: string,
-    inputValueArray: ReadonlyArray<FieldDefinitionNode>,
-    description?: string
-  ): string {
-    const classMembers = inputValueArray
-      .map(arg => {
-        const typeToUse = this.resolveInputFieldType(arg.type);
-        return indent(`${arg.name.value}: ${typeToUse.typeName}`);
-      })
-      .join('\n');
-
-    const decorators = this.config.decorators.join('\n');
-
-    const desc = indent(`"""
-${description} 
-"""`);
-    return `
-${decorators}
-class ${name}:
-${description}
-${classMembers}
-  `;
-  }
-
   protected buildInputTransfomer(name: string, inputValueArray: ReadonlyArray<InputValueDefinitionNode>): string {
     const classMembers = inputValueArray
       .map(arg => {
@@ -231,16 +205,72 @@ ${classMembers}
   `;
   }
 
+  //    isStringValueNode(node: any): node is StringValueNode {
+  //     return node && typeof node === 'object' && node.kind === Kind.STRING;
+  //   }
+
+  docstring(content: StringValueNode, indentLevel = 0, asComment = false): string {
+    if (!content) {
+      return '';
+    }
+
+    const commentStr = asComment === true ? '#' : '"""';
+    // if (isStringValueNode(content)) {
+    //   content = content.value;
+    // }
+    let contentValue = content.value;
+
+    contentValue = contentValue.split('*/').join('*\\/');
+
+    let lines = contentValue.split('\n');
+    if (lines.length === 1) {
+      return indent(`${commentStr} ${lines[0]} ${commentStr}`, indentLevel);
+    }
+    lines = [`${commentStr}`, ...lines.map(line => `${line}`), `${commentStr}`];
+    return lines.map(line => indent(line, indentLevel)).join('\n');
+  }
+  // Builds a python class
+
+  buildClass(node: ObjectTypeDefinitionNode | InputObjectTypeDefinitionNode | InterfaceTypeDefinitionNode): string {
+    let classDeclaration: string[] = [];
+
+    classDeclaration = [...this.config.decorators];
+
+    classDeclaration.push(`class ${node.name.value}:`);
+    const classComment = this.docstring(node.description, 0, false);
+    classDeclaration.push(indent(`${classComment}`));
+
+    node.fields.map(arg => {
+      const typeToUse = this.resolveInputFieldType(arg.type);
+      const fieldComment = this.docstring(arg.description, 0, true);
+      classDeclaration.push(indent(`${fieldComment}`));
+      let defaultValue = '';
+      if (arg.defaultValue && arg.defaultValue.value) {
+        if (typeof arg.defaultValue.value === 'string') {
+          defaultValue = ` = "${arg.defaultValue.value}"`;
+        } else {
+          defaultValue = ` = ${arg.defaultValue.value}`;
+        }
+        //   classDeclaration.push(`hasdefault ${arg.defaultValue.value}`);
+      }
+      classDeclaration.push(indent(`${arg.name.value}: ${typeToUse.typeName} ${defaultValue}`));
+      classDeclaration.push('');
+      // return [indent(`${arg.description}`), indent(`${arg.name.value}: ${typeToUse.typeName}`)];
+    });
+    return classDeclaration.join('\n');
+  }
+
   InputObjectTypeDefinition(node: InputObjectTypeDefinitionNode): string {
-    const name = `${this.convertName(node)}`;
-    return this.buildInputTransfomer(name, node.fields);
+    return this.buildClass(node);
+    // const name = `${this.convertName(node)}`;
+    // return this.buildInputTransfomer(name, node.fields);
   }
 
   ObjectTypeDefinition(node: ObjectTypeDefinitionNode): string {
-    return this.buildObject(node.name.value, node.fields, transformComment(node.description));
+    return this.buildClass(node);
   }
 
   InterfaceTypeDefinition(node: InterfaceTypeDefinitionNode): string {
-    return this.buildObject(node.name.value, node.fields);
+    return this.buildClass(node);
   }
 }
