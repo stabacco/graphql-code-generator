@@ -17,13 +17,14 @@ import {
   InputValueDefinitionNode,
   TypeNode,
   Kind,
+  isNonNullType,
   isScalarType,
   isInputObjectType,
   isEnumType,
   StringValueNode,
   InterfaceTypeDefinitionNode,
 } from 'graphql';
-import { PYTHON_SCALARS, PythonDeclarationBlock, wrapTypeWithModifiers } from './common/common';
+import { PYTHON_SCALARS, PythonDeclarationBlock, PythonClassDeclarationBlock, PythonRequiredClassMemberDeclarationBlock } from './common/common';
 
 export interface PythonResolverParsedConfig extends ParsedConfig {
   className: string;
@@ -34,16 +35,21 @@ export interface PythonResolverParsedConfig extends ParsedConfig {
   decorators: string[];
 }
 
+type WrapModifiersOptions = {
+    wrapOptional(type: string): string;
+    wrapArray(type: string): string;
+  };
+
 export class PythonResolversVisitor extends BaseVisitor<PythonResolversPluginRawConfig, PythonResolverParsedConfig> {
   constructor(rawConfig: PythonResolversPluginRawConfig, private _schema: GraphQLSchema) {
     super(rawConfig, {
       enumValues: rawConfig.enumValues || {},
-      listType: rawConfig.listType || 'List',
+      listType: rawConfig.listType || 'typing.List',
       className: rawConfig.className || 'Types',
       scalars: buildScalars(_schema, rawConfig.scalars, PYTHON_SCALARS),
       license: rawConfig.license || '# take the blue pill',
-      imports: rawConfig.imports || ['from dataclasses import dataclass'],
-      decorators: rawConfig.decorators || ['@dataclass'],
+      imports: rawConfig.imports || ['import typing','from dataclasses import dataclass'],
+      decorators: rawConfig.decorators || ['dataclass'],
     });
   }
 
@@ -61,7 +67,7 @@ export class PythonResolversVisitor extends BaseVisitor<PythonResolversPluginRaw
 
   // not needed
   public wrapWithClass(content: string): string {
-    return new PythonDeclarationBlock()
+    return new PythonClassDeclarationBlock()
       .asKind('class')
       .withDecorators(['@dataclass'])
       .withName(this.config.className)
@@ -143,10 +149,51 @@ export class PythonResolversVisitor extends BaseVisitor<PythonResolversPluginRaw
     }
 
     if (result) {
-      result.typeName = wrapTypeWithModifiers(result.typeName, typeNode, this.config.listType);
+      result.typeName = this.wrapTypeWithModifiers(result.typeName, typeNode, this.config.listType,);
     }
 
     return result;
+  }
+
+
+
+//   protected wrapTypeWithModifiers(
+//     baseType: string,
+//     type: GraphQLOutputType,
+//     options: WrapModifiersOptions
+//   ): string {
+//     let currentType = type;
+//     const modifiers: Array<(type: string) => string> = [];
+//     while (currentType) {
+//       if (isNonNullType(currentType)) {
+//         currentType = currentType.ofType;
+//       } else {
+//         modifiers.push(options.wrapOptional);
+//       }
+  
+//       if (isListType(currentType)) {
+//         modifiers.push(options.wrapArray);
+//         currentType = currentType.ofType;
+//       } else {
+//         break;
+//       }
+//     }
+  
+//     return modifiers.reduceRight((result, modifier) => modifier(result), baseType);
+//   }
+
+  protected wrapTypeWithModifiers(baseType: string, typeNode: TypeNode, listType = 'Iterable', modifiers: string = ""): string {
+
+    let currentModifiers = modifiers;
+
+    if (typeNode.kind === Kind.NON_NULL_TYPE) {
+      return this.wrapTypeWithModifiers(baseType, typeNode.type, listType);
+    } else if (typeNode.kind === Kind.LIST_TYPE) {
+      const innerType = this.wrapTypeWithModifiers(baseType, typeNode.type, listType);
+      return `${listType}[${innerType}]`;
+    } else {
+      return baseType;
+    }
   }
 
   protected buildInputTransfomer(name: string, inputValueArray: ReadonlyArray<InputValueDefinitionNode>): string {
@@ -231,34 +278,91 @@ export class PythonResolversVisitor extends BaseVisitor<PythonResolversPluginRaw
   }
   // Builds a python class
 
-  buildClass(node: ObjectTypeDefinitionNode | InputObjectTypeDefinitionNode | InterfaceTypeDefinitionNode): string {
-    let classDeclaration: string[] = [];
+  buildClass(node: ObjectTypeDefinitionNode): PythonClassDeclarationBlock {
 
-    classDeclaration = [...this.config.decorators];
+    const requiredFields = node.fields.filter(arg => arg.type.kind === Kind.NON_NULL_TYPE)
+    const nonRequiredFields = node.fields.filter(arg => arg.type.kind !== Kind.NON_NULL_TYPE)
 
-    classDeclaration.push(`class ${node.name.value}:`);
-    const classComment = this.docstring(node.description, 0, false);
-    classDeclaration.push(indent(`${classComment}`));
+    let vll =  new PythonClassDeclarationBlock()
+    .withName(node.name.value)
+    .withDecorators(this.config.decorators)
+    .withBaseclasses(node.interfaces.map(currentInterface => currentInterface.name.value))
+    // .implements(node.interfaces.map(currentInterface => currentInterface.name.value))
+    .withDocstring(node.description)
+    .withRequiredFields(requiredFields)
+    .withNonRequiredFields(nonRequiredFields)
+    
+    requiredFields.forEach((requiredField) => {
+        const f = new PythonRequiredClassMemberDeclarationBlock()
+        .withParent(vll)
+        .withTypeAnnotation(this.resolveInputFieldType(requiredField.type).typeName)
+        .withDocstring(requiredField.description)
+        .withName(requiredField.name);
 
-    node.fields.map(arg => {
-      const typeToUse = this.resolveInputFieldType(arg.type);
-      const fieldComment = this.docstring(arg.description, 0, true);
-      classDeclaration.push(indent(`${fieldComment}`));
-      let defaultValue = '';
-      if (arg.defaultValue && arg.defaultValue.value) {
-        if (typeof arg.defaultValue.value === 'string') {
-          defaultValue = ` = "${arg.defaultValue.value}"`;
-        } else {
-          defaultValue = ` = ${arg.defaultValue.value}`;
-        }
-        //   classDeclaration.push(`hasdefault ${arg.defaultValue.value}`);
-      }
-      classDeclaration.push(indent(`${arg.name.value}: ${typeToUse.typeName} ${defaultValue}`));
-      classDeclaration.push('');
-      // return [indent(`${arg.description}`), indent(`${arg.name.value}: ${typeToUse.typeName}`)];
-    });
-    return classDeclaration.join('\n');
+        vll._requiredFields.push(f); // TODO: wtf
+
+     });
+
+    return vll;
   }
+//     // We separate the required fields (NonNullable) from the others since they will need to be 
+//     // declared first.
+//     const requiredFields = node.fields.filter(arg => arg.type.kind === Kind.NON_NULL_TYPE)
+
+//     const nonRequiredFields = node.fields.filter(arg => arg.type.kind !== Kind.NON_NULL_TYPE)
+
+
+//     requiredFields.map( requiredField => {
+//         const fieldDefinition = new PythonDeclarationBlock()
+//         .asKind("field")
+//         .withName(requiredField.name.value)
+//         .withComment(requiredField.description)
+//     })
+    
+//     node.fields.map(arg => {
+//         const typeToUse = this.resolveInputFieldType(arg.type);
+//         // const isRequired = isNonNullType(arg.type);
+//         const fieldComment = this.docstring(arg.description, 0, true);
+//         vll.addClassMember(arg.name.value, typeToUse.typeName, null, [], {}
+//             )
+//     });
+
+//     // node.fields.forEach(field => {
+//     //     vll.addClassMember(field.name.value, this.resolveInputFieldType(field.type.value));
+//     // })
+
+//     console.log(`vvvvvvv ${vll.string}`);
+
+//     return vll.string;
+
+    
+//     let classDeclaration: string[] = [];
+
+//     classDeclaration = [...this.config.decorators];
+
+//     classDeclaration.push(`class ${node.name.value}:`);
+//     const classComment = this.docstring(node.description, 0, false);
+//     classDeclaration.push(indent(`${classComment}`));
+
+//     node.fields.map(arg => {
+//       const typeToUse = this.resolveInputFieldType(arg.type);
+//       const fieldComment = this.docstring(arg.description, 0, true);
+//       classDeclaration.push(indent(`${fieldComment}`));
+//       let defaultValue = '';
+//       if (arg.defaultValue && arg.defaultValue.value) {
+//         if (typeof arg.defaultValue.value === 'string') {
+//           defaultValue = ` = "${arg.defaultValue.value}"`;
+//         } else {
+//           defaultValue = ` = ${arg.defaultValue.value}`;
+//         }
+//         //   classDeclaration.push(`hasdefault ${arg.defaultValue.value}`);
+//       }
+//       classDeclaration.push(indent(`${arg.name.value}: ${typeToUse.typeName} ${defaultValue}`));
+//       classDeclaration.push('');
+//       // return [indent(`${arg.description}`), indent(`${arg.name.value}: ${typeToUse.typeName}`)];
+//     });
+//     return classDeclaration.join('\n');
+//   }
 
   InputObjectTypeDefinition(node: InputObjectTypeDefinitionNode): string {
     return this.buildClass(node);
@@ -267,7 +371,9 @@ export class PythonResolversVisitor extends BaseVisitor<PythonResolversPluginRaw
   }
 
   ObjectTypeDefinition(node: ObjectTypeDefinitionNode): string {
-    return this.buildClass(node);
+    const klass = this.buildClass(node);
+    
+    return klass.string;
   }
 
   InterfaceTypeDefinition(node: InterfaceTypeDefinitionNode): string {

@@ -1,9 +1,16 @@
-import { transformComment, indentMultiline } from '@graphql-codegen/visitor-plugin-common';
-import { StringValueNode, NameNode } from 'graphql';
+import { transformComment, indentMultiline, indent } from '@graphql-codegen/visitor-plugin-common';
+import { StringValueNode, NameNode, Kind, ObjectTypeDefinitionNode, FieldDefinitionNode } from 'graphql';
+import { resultKeyNameFromField } from 'apollo-utilities';
 const stripIndent = require('strip-indent');
 
-export type Kind = 'class'; // | 'interface' | 'enum';
-export type MemberFlags = { transient?: boolean; final?: boolean; volatile?: boolean; static?: boolean };
+export type Kind = 'class' | 'field' | 'method'; // | 'interface' | 'enum';
+export type MemberFlags = {
+  transient?: boolean;
+  final?: boolean;
+  volatile?: boolean;
+  static?: boolean;
+  isRequired?: boolean;
+};
 export type ClassMember = { value: string; name: string; type: string; annotations: string[]; flags: MemberFlags };
 export type ClassMethod = {
   methodAnnotations: string[];
@@ -15,18 +22,21 @@ export type ClassMethod = {
   flags: MemberFlags;
 };
 
+/** Block for a python class */
+
 export class PythonDeclarationBlock {
   _name: string = null;
-  _decorators: string[] = [];
+  _decorators?: string[] = [];
   _extendStr: string[] = [];
   _implementsStr: string[] = [];
   _kind: Kind = null;
   _block = null;
   _comment = null;
   _annotations: string[] = [];
-  _members: ClassMember[] = [];
-  _methods: ClassMethod[] = [];
+  _members?: ClassMember[] = [];
+  _methods?: ClassMethod[] = [];
   _nestedClasses: PythonDeclarationBlock[] = [];
+  _indent: number = 0;
 
   nestedClass(nstCls: PythonDeclarationBlock): PythonDeclarationBlock {
     this._nestedClasses.push(nstCls);
@@ -34,11 +44,16 @@ export class PythonDeclarationBlock {
     return this;
   }
 
-  // access(access: Access): PythonDeclarationBlock {
-  //   this._access = access;
+  addIndent(value: number = 1): PythonDeclarationBlock {
+    this._indent += value;
+    return this;
+  }
 
-  //   return this;
-  // }
+  removeIndent(value: number = 1): PythonDeclarationBlock {
+    this._indent -= value;
+    this._indent = Math.max(this._indent, 0);
+    return this;
+  }
 
   asKind(kind: Kind): PythonDeclarationBlock {
     this._kind = kind;
@@ -49,11 +64,6 @@ export class PythonDeclarationBlock {
   annotate(annotations: string[]): PythonDeclarationBlock {
     this._annotations = annotations;
 
-    return this;
-  }
-
-  withDecorators(decorators: string[]): PythonDeclarationBlock {
-    this._decorators = decorators;
     return this;
   }
 
@@ -71,19 +81,15 @@ export class PythonDeclarationBlock {
     return this;
   }
 
-  extends(extendStr: string[]): PythonDeclarationBlock {
-    this._extendStr = extendStr;
-
-    return this;
-  }
-
   implements(implementsStr: string[]): PythonDeclarationBlock {
     this._implementsStr = implementsStr;
 
     return this;
   }
 
-  withName(name: string | NameNode): PythonDeclarationBlock {
+  withName(
+    name: string | NameNode
+  ): PythonDeclarationBlock | PythonClassDeclarationBlock | PythonRequiredClassMemberDeclarationBlock {
     this._name = typeof name === 'object' ? (name as NameNode).value : name;
 
     return this;
@@ -92,18 +98,21 @@ export class PythonDeclarationBlock {
   private printMember(member: Partial<ClassMember>): string {
     const flags = member.flags || {};
 
-    const pieces = [
-      // member.access,
-      // flags.static ? 'static' : null,
-      // flags.final ? 'final' : null,
-      // flags.transient ? 'transient' : null,
-      // flags.volatile ? 'volatile' : null,
-      ...(member.annotations || []).map(annotation => `@${annotation}`),
-      member.type,
-      member.name,
-    ].filter(f => f);
+    console.log(member);
+    let value = member.value;
 
-    return pieces.join(' ') + (member.value ? ` = ${member.value}` : '');
+    let type = member.type;
+
+    if (flags.isRequired == false) {
+      value = 'None';
+      type = `Optional[${type}]`;
+    }
+    const pieces = [...(member.annotations || []).map(annotation => `@${annotation}`), type, member.name].filter(
+      f => f
+    );
+
+    return `${member.name}: ${type}` + (value ? ` = ${value}` : '');
+    // return pieces.join(' ') + (member.value ? ` = ${member.value}` : '');
   }
 
   private printMethod(method: ClassMethod): string {
@@ -129,7 +138,7 @@ ${indentMultiline(method.implementation)}
   addClassMember(
     name: string,
     type: string,
-    value: string,
+    value?: string,
     typeAnnotations: string[] = [],
     flags: MemberFlags = {}
   ): PythonDeclarationBlock {
@@ -140,10 +149,6 @@ ${indentMultiline(method.implementation)}
       annotations: typeAnnotations,
       // access,
       flags: {
-        final: false,
-        transient: false,
-        volatile: false,
-        static: false,
         ...flags,
       },
     });
@@ -180,6 +185,18 @@ ${indentMultiline(method.implementation)}
     return this;
   }
 
+  formattedComment(comment: string | StringValueNode): string | null {
+    if (comment != null) {
+      if (typeof comment === 'object' && comment.kind === Kind.STRING) {
+        comment = comment.value;
+        return comment;
+      } else if (typeof comment === 'string') {
+        return comment;
+      }
+    }
+    return null;
+  }
+
   public get string(): string {
     let result = '';
 
@@ -193,26 +210,24 @@ ${indentMultiline(method.implementation)}
       let extendStr = '';
       let implementsStr = '';
       let annotatesStr = '';
-      const final = this._final ? ' final' : '';
-      const isStatic = this._static ? ' static' : '';
 
       if (this._extendStr.length > 0) {
         extendStr = ` : ${this._extendStr.join(', ')}`;
       }
 
       if (this._implementsStr.length > 0) {
-        implementsStr = ` : ${this._implementsStr.join(', ')}`;
+        implementsStr = `(${this._implementsStr.join(', ')})`;
       }
 
       if (this._annotations.length > 0) {
         annotatesStr = this._annotations.map(a => `@${a}`).join('\n') + '\n';
       }
 
-      result += `${annotatesStr}${this._access}${isStatic}${final} ${this._kind} ${name}${extendStr}${implementsStr} `;
+      result += `${annotatesStr}${this._kind} ${name}${implementsStr}:`;
     }
 
     const members = this._members.length
-      ? indentMultiline(stripIndent(this._members.map(member => this.printMember(member) + ';').join('\n')))
+      ? indentMultiline(stripIndent(this._members.map(member => this.printMember(member)).join('\n')))
       : null;
     const methods = this._methods.length
       ? indentMultiline(stripIndent(this._methods.map(method => this.printMethod(method)).join('\n\n')))
@@ -220,11 +235,147 @@ ${indentMultiline(method.implementation)}
     const nestedClasses = this._nestedClasses.length
       ? this._nestedClasses.map(c => indentMultiline(c.string)).join('\n\n')
       : null;
-    const before = '{';
-    const after = '}';
+    const before = '\n';
+    const after = '';
     const block = [before, members, methods, nestedClasses, this._block, after].filter(f => f).join('\n');
     result += block;
 
     return (this._comment ? this._comment : '') + result + '\n';
   }
+}
+
+export class PythonClassDeclarationBlock extends PythonDeclarationBlock {
+  _kind: Kind = 'class';
+  _name: string = null;
+  _decorators?: string[] = [];
+  _baseclasses?: string[] = [];
+  _docstring?: string = null;
+  _members?: ClassMember[] = [];
+  _methods?: ClassMethod[] = [];
+  _requiredFields: PythonRequiredClassMemberDeclarationBlock[] = [];
+  _nonRequiredFields: PythonNonRequiredClassMemberDeclarationBlock[] = [];
+
+  withName(name: string | NameNode): PythonClassDeclarationBlock {
+    this._name = typeof name === 'object' ? (name as NameNode).value : name;
+
+    return this;
+  }
+
+  withDocstring(comment: string | StringValueNode | null): PythonClassDeclarationBlock {
+    this._comment = this.formattedComment(comment);
+    return this;
+  }
+  withBaseclasses(baseclasses: string[]): PythonClassDeclarationBlock {
+    this._baseclasses = baseclasses;
+    return this;
+  }
+
+  withDecorators(decorators: string[]): PythonClassDeclarationBlock {
+    this._decorators = decorators;
+    return this;
+  }
+
+  withRequiredFields(fields: FieldDefinitionNode[]): PythonClassDeclarationBlock {
+    this._requiredFields = fields;
+    return this;
+  }
+
+  withNonRequiredFields(fields: FieldDefinitionNode[]): PythonClassDeclarationBlock {
+    this._nonRequiredFields = fields;
+    return this;
+  }
+
+  // printString(value: string): string {
+  //   return indent(value, this._indent);
+  // }
+
+  /** the main serializer function */
+  public get string(): string {
+    const separator = '';
+    let result = [];
+
+    let decorators = [];
+    this._decorators.forEach(decorator => {
+      decorators.push(`@${decorator}`);
+    });
+
+    let classDeclaration = `${this._kind} ${this._name}`;
+
+    if (this._baseclasses.length > 0) {
+      classDeclaration += '(';
+      classDeclaration += this._baseclasses.join(', ');
+      classDeclaration += ')';
+    }
+    classDeclaration += ':';
+
+    let docstring = '';
+    if (this._docstring) {
+      docstring = `
+"""${this._docstring}
+"""
+`;
+    }
+
+    let requiredFields = [];
+
+    this._requiredFields.forEach(requiredField => {
+      // console.log(requiredField.string);
+      requiredFields.push(requiredField.string);
+    });
+
+
+    result = result.concat(
+      decorators,
+      classDeclaration,
+      docstring ? indentMultiline(docstring) : '',
+      separator,
+      requiredFields,
+      separator
+    );
+    return result.join('\n');
+  }
+}
+
+export class PythonRequiredClassMemberDeclarationBlock extends PythonDeclarationBlock {
+  _parent: PythonClassDeclarationBlock;
+  _kind: Kind = 'field';
+  _name: string = null;
+  _typeAnnotation: string = null;
+  _docstring?: string = null;
+
+  withParent(parent: PythonClassDeclarationBlock): PythonRequiredClassMemberDeclarationBlock {
+    this._parent = parent;
+    return this;
+  }
+
+  withDocstring(comment: string | StringValueNode | null): PythonRequiredClassMemberDeclarationBlock {
+    this._comment = this.formattedComment(comment);
+    return this;
+  }
+
+  /** the string representation */
+  public get string(): string {
+
+    const typeStr = `${this._name}: ${this._typeAnnotation}`
+    return indent(typeStr, this._parent._indent + 1);
+
+  }
+
+  withTypeAnnotation(typeAnnotation: string): PythonRequiredClassMemberDeclarationBlock {
+    this._typeAnnotation = typeAnnotation;
+    return this;
+  }
+}
+
+export class PythonNonRequiredClassMemberDeclarationBlock extends PythonDeclarationBlock {
+  _kind: Kind = 'field';
+  _name: string = null;
+  _docstring?: string = null;
+}
+export class PythonClassMethodDeclarationBlock {
+  _kind: Kind = 'method';
+  _name: string = null;
+  _decorators?: string[] = [];
+  _docstring?: string = null;
+  _signature?: string = null;
 }

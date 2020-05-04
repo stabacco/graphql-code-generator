@@ -1,65 +1,71 @@
 import { plugin } from '../src/index';
 import { buildSchema } from 'graphql';
 
-describe('A simple type with comments', () => {
-  const schema = buildSchema(/* GraphQL */ `
-    """
-    This is my type
-    """
-    type MyType {
-      """
-      This is my real
-      """
-      real: Int!
-    }
+// describe('A simple type with comments', () => {
+//   const schema = buildSchema(/* GraphQL */ `
+//     """
+//     This is my type
+//     """
+//     type MyType {
+//       """
+//       This is my real
+//       """
+//       real: Int!
+//     }
 
-    """
-    A constant segment of a complex-valued function of time.
-    """
-    input ComplexSegment {
-      """
-      The duration of the segment.
-      """
-      duration: Float!
-      """
-      The value taken by the function on this segment.
-      """
-      value: String!
-      """
-      The matching class in core.
-      """
-      _core_type: String = "ComplexSegment"
-    }
+//     "An action"
+//     type Action {
+//       id: ID!
+//       model_id: String
+//       name: String
+//       status: String
+//       model_type: String
+//       runtime: Float
+//       definition: String
+//       result: String
+//     }
+//   `);
 
-    """
-    A constant segment of a complex-valued function of time.
-    """
-    input ComplexSegment22 {
-      """
-      The duration of the segment.
-      """
-      duration: Float!
-      """
-      The value taken by the function on this segment.
-      """
-      value: String!
-      """
-      The matching class in core.
-      """
-      _core_type: String = "ComplexSegment"
-    }
+//   it('Should create a class with docstring', async () => {
+//     const result = await plugin(
+//       schema,
+//       [],
+//       {
+//         globalNamespace: true,
+//         license: '# This is my license, dawg',
+//       },
+//       { outputFile: './del.ts' }
+//     );
 
-    type A {
-      a_string: String
-    }
+//     expect(result).toBe(`# generated automatically by Stefano
 
-    type B {
-      a: A!
-      b_string: String
-    }
-  `);
 
-  it('Should create a class with docstring', async () => {
+// from dataclasses import dataclass
+
+
+// @dataclass
+// class MyType:
+//     real: int
+
+// `);
+//   });
+// });
+
+describe('Interface Example', () => {
+  const schema = buildSchema(`
+
+"""Common Node declaration"""
+interface Node {
+  id: ID!
+}
+
+type A implements Node {
+    id: ID!
+    a: String
+}
+
+`);
+  it('Should parse correctly', async () => {
     const result = await plugin(
       schema,
       [],
@@ -71,14 +77,6 @@ describe('A simple type with comments', () => {
     );
 
     expect(result).toBe(`# generated automatically by Stefano
-
-
-from dataclasses import dataclass
-
-
-@dataclass
-class MyType:
-    real: int
 
 `);
   });

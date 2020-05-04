@@ -23,5 +23,5 @@ export const plugin: PluginFunction<PythonResolversPluginRawConfig> = async (
 
   const blockContent = visitorResult.definitions.filter(d => typeof d === 'string').join('\n');
 
-  return [license, imports, blockContent].join('\n');
+  return [license, '', imports, blockContent].join('\n');
 };
