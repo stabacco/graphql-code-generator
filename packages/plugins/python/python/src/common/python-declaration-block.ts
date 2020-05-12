@@ -1,6 +1,7 @@
 import { transformComment, indentMultiline, indent } from '@graphql-codegen/visitor-plugin-common';
 import { StringValueNode, NameNode, Kind, ObjectTypeDefinitionNode, FieldDefinitionNode } from 'graphql';
 import { resultKeyNameFromField } from 'apollo-utilities';
+import {  } from 'handlebars';
 const stripIndent = require('strip-indent');
 
 export type Kind = 'class' | 'field' | 'method'; // | 'interface' | 'enum';
@@ -11,6 +12,7 @@ export type MemberFlags = {
   static?: boolean;
   isRequired?: boolean;
 };
+
 export type ClassMember = { value: string; name: string; type: string; annotations: string[]; flags: MemberFlags };
 export type ClassMethod = {
   methodAnnotations: string[];

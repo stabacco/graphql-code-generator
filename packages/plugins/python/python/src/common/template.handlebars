@@ -1,0 +1,19 @@
+{{shebang}}
+{{disclaimer}}
+
+{{imports}}
+
+{{#each PythonClass}}
+
+
+{{decorators}}
+class {{name}}:
+    """"
+    {{docstring}}
+    """"
+
+    {{#each requiredMember}}
+    {{name}}: {{typeHint}}
+    {{/each}}
+{{/each}}
+

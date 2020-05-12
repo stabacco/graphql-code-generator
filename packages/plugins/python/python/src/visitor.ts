@@ -394,3 +394,4 @@ export class PythonResolversVisitor extends BaseVisitor<PythonResolversPluginRaw
     return this.buildClass(node).string;
   }
 }
+
