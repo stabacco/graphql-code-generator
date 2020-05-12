@@ -32,6 +32,7 @@ export class PythonDeclarationBlock {
   _kind: Kind = null;
   _block = null;
   _comment = null;
+  _value = null;
   _annotations: string[] = [];
   _members?: ClassMember[] = [];
   _methods?: ClassMethod[] = [];
@@ -67,6 +68,9 @@ export class PythonDeclarationBlock {
     return this;
   }
 
+  withValue(value: any) -> PythonDeclarationBlock {
+    this._value = value
+  }
   withComment(comment: string | StringValueNode | null): PythonDeclarationBlock {
     if (comment) {
       this._comment = transformComment(comment, 0);
@@ -262,7 +266,7 @@ export class PythonClassDeclarationBlock extends PythonDeclarationBlock {
   }
 
   withDocstring(comment: string | StringValueNode | null): PythonClassDeclarationBlock {
-    this._comment = this.formattedComment(comment);
+    this._docstring = this.formattedComment(comment);
     return this;
   }
   withBaseclasses(baseclasses: string[]): PythonClassDeclarationBlock {
@@ -308,13 +312,7 @@ export class PythonClassDeclarationBlock extends PythonDeclarationBlock {
     }
     classDeclaration += ':';
 
-    let docstring = '';
-    if (this._docstring) {
-      docstring = `
-"""${this._docstring}
-"""
-`;
-    }
+
 
     let requiredFields = [];
 
@@ -323,6 +321,18 @@ export class PythonClassDeclarationBlock extends PythonDeclarationBlock {
       requiredFields.push(requiredField.string);
     });
 
+    let nonRequiredFields = [];
+    this._nonRequiredFields.forEach(nonRequiredField => {
+      nonRequiredFields.push(nonRequiredField.string);
+    });
+
+    let docstring = '';
+    if (this._docstring) {
+      docstring = `
+"""${this._docstring}
+"""
+`;
+    }
 
     result = result.concat(
       decorators,
@@ -330,6 +340,7 @@ export class PythonClassDeclarationBlock extends PythonDeclarationBlock {
       docstring ? indentMultiline(docstring) : '',
       separator,
       requiredFields,
+      nonRequiredFields,
       separator
     );
     return result.join('\n');
@@ -349,16 +360,18 @@ export class PythonRequiredClassMemberDeclarationBlock extends PythonDeclaration
   }
 
   withDocstring(comment: string | StringValueNode | null): PythonRequiredClassMemberDeclarationBlock {
-    this._comment = this.formattedComment(comment);
+    this._docstring = this.formattedComment(comment);
     return this;
   }
 
   /** the string representation */
   public get string(): string {
-
-    const typeStr = `${this._name}: ${this._typeAnnotation}`
+    const typeStr = `${this._name}: ${this._typeAnnotation}`;
+    if (this._docstring){
+    this._parent._docstring += (`\n\n    ${this._name}: ${this._docstring}`)
+    console.log(this._parent._docstring)
+  }
     return indent(typeStr, this._parent._indent + 1);
-
   }
 
   withTypeAnnotation(typeAnnotation: string): PythonRequiredClassMemberDeclarationBlock {
@@ -368,9 +381,57 @@ export class PythonRequiredClassMemberDeclarationBlock extends PythonDeclaration
 }
 
 export class PythonNonRequiredClassMemberDeclarationBlock extends PythonDeclarationBlock {
+  _parent: PythonClassDeclarationBlock;
   _kind: Kind = 'field';
   _name: string = null;
+  _typeAnnotation: string = null;
   _docstring?: string = null;
+  _value?: any = null;
+
+  withParent(parent: PythonClassDeclarationBlock): PythonNonRequiredClassMemberDeclarationBlock {
+    this._parent = parent;
+    return this;
+  }
+
+  withDocstring(comment: string | StringValueNode | null): PythonNonRequiredClassMemberDeclarationBlock {
+    this._docstring = this.formattedComment(comment);
+    return this;
+  }
+
+  withTypeAnnotation(typeAnnotation: string): PythonNonRequiredClassMemberDeclarationBlock {
+    this._typeAnnotation = typeAnnotation;
+    return this;
+  }
+
+  withValue(arg: any): PythonNonRequiredClassMemberDeclarationBlock {
+    let defaultValue: string = null;
+    if (arg.defaultValue != null) {
+      if (typeof arg.defaultValue.value === 'string') {
+        defaultValue = `"${arg.defaultValue.value}"`;
+      } else {
+        defaultValue = `${arg.defaultValue.value}`;
+      }
+    }
+    console.log(`val ${defaultValue} 
+      `)
+    this._value = defaultValue;
+    return this;
+  }
+
+  /** the string representation */
+  public get string(): string {
+
+
+    const value = this._value === null? 'None' : this._value;
+
+    // TODO: docstring formatter here.
+    const typeStr = `${this._name}: typing.Optional[${this._typeAnnotation}] = ${value}`;
+    this._parent._docstring += (`\n\n    ${this._name}: ${this._docstring}`)
+    console.log(this._parent._docstring)
+    return indent(typeStr, this._parent._indent + 1);
+  }
+  
+
 }
 export class PythonClassMethodDeclarationBlock {
   _kind: Kind = 'method';

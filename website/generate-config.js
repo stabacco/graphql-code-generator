@@ -39,6 +39,8 @@ const mapping = {
   '../packages/plugins/other/visitor-plugin-common/src/base-resolvers-visitor.ts': BASE_DIR + '/base-resolvers-visitor.md',
   '../packages/plugins/other/visitor-plugin-common/src/base-documents-visitor.ts': BASE_DIR + '/base-documents-visitor.md',
   '../packages/plugins/other/visitor-plugin-common/src/client-side-base-visitor.ts': BASE_DIR + '/client-side-base-visitor.md',
+  '../packages/plugins/python/python/src/index.ts': BASE_DIR + '/python.md'
+  
 };
 
 Promise.all(

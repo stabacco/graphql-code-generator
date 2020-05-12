@@ -56,11 +56,15 @@ describe('Interface Example', () => {
 
 """Common Node declaration"""
 interface Node {
+  """The much needed id"""
   id: ID!
 }
 
+"""A node which was implemented"""
 type A implements Node {
+
     id: ID!
+    """A Parameter"""
     a: String
 }
 
